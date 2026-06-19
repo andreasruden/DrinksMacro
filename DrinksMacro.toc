@@ -1,0 +1,8 @@
+## Interface: 11508
+## Title: DrinkMacro
+## Notes: Maintains a macro for drinking & eating your highest level snacks.
+## Author: Shiro
+## Version: 1.0.0
+
+DrinksMacro.lua
+Config.lua
