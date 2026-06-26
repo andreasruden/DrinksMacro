@@ -6,4 +6,6 @@
 ## SavedVariables: DrinksMacroDB
 
 DrinksMacro.lua
+Locale.lua
+Scan.lua
 Config.lua

@@ -1,1 +1,39 @@
--- TODO
+local addonName, DrinksMacro = ...
+
+SLASH_DRINKSMACRODEBUG1 = "/dmdbg"
+SlashCmdList["DRINKSMACRODEBUG"] = function()
+    local getNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
+    local tip = DrinksMacroScanTooltip
+    for bagID = 0, NUM_BAG_SLOTS or 4 do
+        for slot = 1, getNumSlots(bagID) do
+            tip:ClearLines()
+            tip:SetBagItem(bagID, slot)
+            if tip:NumLines() > 0 then
+                print(string.format("-- bag=%d slot=%d --", bagID, slot))
+                for i = 1, tip:NumLines() do
+                    local r = _G["DrinksMacroScanTooltipTextLeft" .. i]
+                    if r and r:GetText() then
+                        print("  [" .. i .. "] " .. r:GetText())
+                    end
+                end
+            end
+        end
+    end
+end
+
+SLASH_DRINKSMACRO1 = "/dm"
+SlashCmdList["DRINKSMACRO"] = function()
+    local water, food = DrinksMacro.Scan.FindBestConsumables()
+    if water then
+        print(string.format("[DM] Water: bag=%d slot=%d conjured=%s manaRate=%.1f/s",
+            water.bagID, water.slot, tostring(water.isConjured), water.manaRate))
+    else
+        print("[DM] Water: none found")
+    end
+    if food then
+        print(string.format("[DM] Food:  bag=%d slot=%d conjured=%s healthRate=%.1f/s",
+            food.bagID, food.slot, tostring(food.isConjured), food.healthRate))
+    else
+        print("[DM] Food:  none found")
+    end
+end
