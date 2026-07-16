@@ -60,7 +60,8 @@ local function scanSlot(bagID, slot)
         end
 
         -- Items granting "Well Fed" are food buffs, not consumable restores.
-        if line:find(L.WELL_FED, 1, true) then
+        -- Tooltip casing varies ("Well Fed" vs "well fed"), so compare lowercased.
+        if line:lower():find(L.WELL_FED:lower(), 1, true) then
             return
         end
 
