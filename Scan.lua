@@ -31,6 +31,18 @@ local function parseRate(line, pattern)
     end
 end
 
+-- Parses a combined "Restores X health and Y mana over Z sec" line.
+-- @return healthRate, manaRate  number|nil, number|nil
+local function parseCombinedRate(line, pattern)
+    local healthAmount, manaAmount, duration = line:match(pattern)
+    if healthAmount and manaAmount and duration then
+        duration = tonumber(duration)
+        if duration > 0 then
+            return tonumber(healthAmount) / duration, tonumber(manaAmount) / duration
+        end
+    end
+end
+
 -- Returns item info table or nil if slot should be ignored.
 local function scanSlot(bagID, slot)
     local lines = readTooltipLines(bagID, slot)
@@ -52,8 +64,9 @@ local function scanSlot(bagID, slot)
 
         if line:find(L.USE_PREFIX, 1, true) then
             hasUse = true
-            manaRate   = manaRate   or parseRate(line, L.RESTORE_MANA_PATTERN)
-            healthRate = healthRate or parseRate(line, L.RESTORE_HEALTH_PATTERN)
+            local comboHealthRate, comboManaRate = parseCombinedRate(line, L.RESTORE_HEALTH_MANA_PATTERN)
+            manaRate   = manaRate   or comboManaRate   or parseRate(line, L.RESTORE_MANA_PATTERN)
+            healthRate = healthRate or comboHealthRate or parseRate(line, L.RESTORE_HEALTH_PATTERN)
         end
     end
 
@@ -79,8 +92,9 @@ local function isBetter(candidate, current, rateKey)
 end
 
 --- Scans the backpack and all bags for water and food consumables.
--- @return bestWater  table|nil  { bagID, slot, isConjured, manaRate }
--- @return bestFood   table|nil  { bagID, slot, isConjured, healthRate }
+-- @return bestWater      table|nil  { bagID, slot, isConjured, manaRate }
+-- @return bestFood       table|nil  { bagID, slot, isConjured, healthRate }
+-- @return foodRestoresMana boolean  true if bestFood also restores mana
 function Scan.FindBestConsumables()
     local bestWater, bestFood
 
@@ -99,5 +113,7 @@ function Scan.FindBestConsumables()
         end
     end
 
-    return bestWater, bestFood
+    local foodRestoresMana = bestFood ~= nil and bestFood.manaRate ~= nil
+
+    return bestWater, bestFood, foodRestoresMana
 end

@@ -47,11 +47,15 @@ end
 
 function DrinksMacro.UpdateMacro()
     local db = DrinksMacroDB
-    local water, food = DrinksMacro.Scan.FindBestConsumables()
+    local water, food, foodRestoresMana = DrinksMacro.Scan.FindBestConsumables()
     local lines = {}
     local waterLink, foodLink
 
-    if db.drink.enabled and water then
+    local hpMax = UnitHealthMax("player")
+    local hpPct = hpMax > 0 and (UnitHealth("player") / hpMax * 100) or 100
+    local needsFood = db.food.enabled and food ~= nil and (not db.food.useThreshold or hpPct < db.food.threshold)
+
+    if db.drink.enabled and water and not (needsFood and foodRestoresMana) then
         local mana = UnitMana and UnitMana("player") or UnitPower("player", 0)
         local manaMax = UnitManaMax and UnitManaMax("player") or UnitPowerMax("player", 0)
         local pct = manaMax > 0 and (mana / manaMax * 100) or 100
@@ -65,16 +69,12 @@ function DrinksMacro.UpdateMacro()
         end
     end
 
-    if db.food.enabled and food then
-        local hpMax = UnitHealthMax("player")
-        local pct = hpMax > 0 and (UnitHealth("player") / hpMax * 100) or 100
-        if not db.food.useThreshold or pct < db.food.threshold then
-            local itemID = getItemID(food.bagID, food.slot)
-            local name, link = itemID and GetItemInfo(itemID)
-            foodLink = link or name or tostring(itemID)
-            if name then
-                lines[#lines + 1] = "/use " .. name
-            end
+    if needsFood then
+        local itemID = getItemID(food.bagID, food.slot)
+        local name, link = itemID and GetItemInfo(itemID)
+        foodLink = link or name or tostring(itemID)
+        if name then
+            lines[#lines + 1] = "/use " .. name
         end
     end
 
