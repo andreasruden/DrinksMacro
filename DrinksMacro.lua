@@ -91,7 +91,8 @@ dmFrame:SetScript("OnEvent", function(self, event, name)
         if name ~= addonName then return end
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
-    elseif event == "PLAYER_REGEN_ENABLED" then
+        self:RegisterEvent("PLAYER_ENTERING_WORLD")
+    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_ENTERING_WORLD" then
         DrinksMacro.UpdateMacro()
     end
 end)
