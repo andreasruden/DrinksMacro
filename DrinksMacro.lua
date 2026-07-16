@@ -49,7 +49,6 @@ function DrinksMacro.UpdateMacro()
     local db = DrinksMacroDB
     local water, food, foodRestoresMana = DrinksMacro.Scan.FindBestConsumables()
     local lines = {}
-    local waterLink, foodLink
 
     local hpMax = UnitHealthMax("player")
     local hpPct = hpMax > 0 and (UnitHealth("player") / hpMax * 100) or 100
@@ -61,8 +60,7 @@ function DrinksMacro.UpdateMacro()
         local pct = manaMax > 0 and (mana / manaMax * 100) or 100
         if not db.drink.useThreshold or pct < db.drink.threshold then
             local itemID = getItemID(water.bagID, water.slot)
-            local name, link = itemID and GetItemInfo(itemID)
-            waterLink = link or name or tostring(itemID)
+            local name = itemID and GetItemInfo(itemID)
             if name then
                 lines[#lines + 1] = "/use " .. name
             end
@@ -71,8 +69,7 @@ function DrinksMacro.UpdateMacro()
 
     if needsFood then
         local itemID = getItemID(food.bagID, food.slot)
-        local name, link = itemID and GetItemInfo(itemID)
-        foodLink = link or name or tostring(itemID)
+        local name = itemID and GetItemInfo(itemID)
         if name then
             lines[#lines + 1] = "/use " .. name
         end
@@ -84,13 +81,6 @@ function DrinksMacro.UpdateMacro()
         CreateMacro("DrinksMacro", "INV_MISC_QUESTIONMARK", body, false)
     else
         EditMacro(idx, "DrinksMacro", nil, body)
-    end
-
-    if waterLink or foodLink then
-        local parts = {}
-        if waterLink then parts[#parts + 1] = "Water: " .. waterLink end
-        if foodLink then parts[#parts + 1] = "Food: " .. foodLink end
-        print("[DM] " .. table.concat(parts, "  "))
     end
 end
 

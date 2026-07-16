@@ -7,6 +7,8 @@ local Scan = DrinksMacro.Scan
 local ScanTooltip = CreateFrame("GameTooltip", "DrinksMacroScanTooltip", nil, "GameTooltipTemplate")
 ScanTooltip:SetOwner(WorldFrame, "ANCHOR_NONE")
 
+local cache
+
 local function readTooltipLines(bagID, slot)
     ScanTooltip:ClearLines()
     ScanTooltip:SetBagItem(bagID, slot)
@@ -81,6 +83,19 @@ local function scanSlot(bagID, slot)
     }
 end
 
+local function getContainerItemID(bagID, slot)
+    local getItemID = C_Container and C_Container.GetContainerItemID or GetContainerItemID
+    return getItemID(bagID, slot)
+end
+
+-- Checks that the slots recorded in cache still hold the same items.
+local function isCacheValid()
+    if not cache.isValid then return false end
+    if cache.water and getContainerItemID(cache.water.bagID, cache.water.slot) ~= cache.water.itemID then return false end
+    if cache.food and getContainerItemID(cache.food.bagID, cache.food.slot) ~= cache.food.itemID then return false end
+    return true
+end
+
 -- Returns true when candidate should replace current as the best pick.
 -- Conjured always wins over non-conjured; ties broken by restore rate.
 local function isBetter(candidate, current, rateKey)
@@ -96,6 +111,13 @@ end
 -- @return bestFood       table|nil  { bagID, slot, isConjured, healthRate }
 -- @return foodRestoresMana boolean  true if bestFood also restores mana
 function Scan.FindBestConsumables()
+    if cache then
+        if isCacheValid() then
+            return cache.bestWater, cache.bestFood, cache.foodRestoresMana
+        end
+        cache = nil
+    end
+
     local bestWater, bestFood
 
     local getNumSlots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
@@ -114,6 +136,15 @@ function Scan.FindBestConsumables()
     end
 
     local foodRestoresMana = bestFood ~= nil and bestFood.manaRate ~= nil
+
+    cache = {
+        isValid = bestWater ~= nil or bestFood ~= nil,
+        bestWater = bestWater,
+        bestFood = bestFood,
+        foodRestoresMana = foodRestoresMana,
+        water = bestWater and { bagID = bestWater.bagID, slot = bestWater.slot, itemID = getContainerItemID(bestWater.bagID, bestWater.slot) },
+        food = bestFood and { bagID = bestFood.bagID, slot = bestFood.slot, itemID = getContainerItemID(bestFood.bagID, bestFood.slot) },
+    }
 
     return bestWater, bestFood, foodRestoresMana
 end
