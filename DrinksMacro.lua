@@ -23,7 +23,8 @@ end
 
 SLASH_DRINKSMACRO1 = "/dm"
 SlashCmdList["DRINKSMACRO"] = function()
-    local water, food = DrinksMacro.Scan.FindBestConsumables()
+    local water, food, _, wasCached = DrinksMacro.Scan.FindBestConsumables()
+    print("[DM] Cached: " .. tostring(wasCached))
     if water then
         print(string.format("[DM] Water: bag=%d slot=%d conjured=%s manaRate=%.1f/s",
             water.bagID, water.slot, tostring(water.isConjured), water.manaRate))
@@ -86,13 +87,21 @@ end
 
 local dmFrame = CreateFrame("Frame")
 dmFrame:RegisterEvent("ADDON_LOADED")
-dmFrame:SetScript("OnEvent", function(self, event, name)
+dmFrame:SetScript("OnEvent", function(self, event, name, ...)
     if event == "ADDON_LOADED" then
         if name ~= addonName then return end
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
-    elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_ENTERING_WORLD" then
+    elseif event == "PLAYER_REGEN_ENABLED" then
         DrinksMacro.UpdateMacro()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        local isLogin, isReload = name, ...
+        -- A plain zone/instance change (not login or /reload) keeps whatever macro
+        -- already exists; bag contents haven't changed, and a fresh scan right after
+        -- a loading screen can run before bag data is populated, producing an empty macro.
+        if isLogin or isReload then
+            DrinksMacro.UpdateMacro()
+        end
     end
 end)

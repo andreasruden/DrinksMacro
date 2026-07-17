@@ -9,9 +9,7 @@ ScanTooltip:SetOwner(WorldFrame, "ANCHOR_NONE")
 
 local cache
 
-local function readTooltipLines(bagID, slot)
-    ScanTooltip:ClearLines()
-    ScanTooltip:SetBagItem(bagID, slot)
+local function readTooltipLines()
     local lines = {}
     for i = 1, ScanTooltip:NumLines() do
         local region = _G["DrinksMacroScanTooltipTextLeft" .. i]
@@ -45,9 +43,8 @@ local function parseCombinedRate(line, pattern)
     end
 end
 
--- Returns item info table or nil if slot should be ignored.
-local function scanSlot(bagID, slot)
-    local lines = readTooltipLines(bagID, slot)
+-- Classifies already-loaded ScanTooltip contents. Returns item info or nil if it should be ignored.
+local function classifyTooltip(lines)
     if #lines == 0 then return end
 
     local isConjured = false
@@ -76,12 +73,27 @@ local function scanSlot(bagID, slot)
     if not hasUse or (not manaRate and not healthRate) then return end
 
     return {
-        bagID      = bagID,
-        slot       = slot,
         isConjured = isConjured,
         manaRate   = manaRate,
         healthRate = healthRate,
     }
+end
+
+-- Returns item info table or nil if slot should be ignored.
+local function scanSlot(bagID, slot)
+    ScanTooltip:ClearLines()
+    ScanTooltip:SetBagItem(bagID, slot)
+    local item = classifyTooltip(readTooltipLines())
+    if not item then return end
+    item.bagID, item.slot = bagID, slot
+    return item
+end
+
+-- Returns item info table or nil if the linked item should be ignored.
+local function scanLink(itemLink)
+    ScanTooltip:ClearLines()
+    ScanTooltip:SetHyperlink(itemLink)
+    return classifyTooltip(readTooltipLines())
 end
 
 local function getContainerItemID(bagID, slot)
@@ -111,10 +123,11 @@ end
 -- @return bestWater      table|nil  { bagID, slot, isConjured, manaRate }
 -- @return bestFood       table|nil  { bagID, slot, isConjured, healthRate }
 -- @return foodRestoresMana boolean  true if bestFood also restores mana
+-- @return wasCached      boolean  true if the result came from cache instead of a fresh scan
 function Scan.FindBestConsumables()
     if cache then
         if isCacheValid() then
-            return cache.bestWater, cache.bestFood, cache.foodRestoresMana
+            return cache.bestWater, cache.bestFood, cache.foodRestoresMana, true
         end
         cache = nil
     end
@@ -139,7 +152,7 @@ function Scan.FindBestConsumables()
     local foodRestoresMana = bestFood ~= nil and bestFood.manaRate ~= nil
 
     cache = {
-        isValid = bestWater ~= nil or bestFood ~= nil,
+        isValid = true,
         bestWater = bestWater,
         bestFood = bestFood,
         foodRestoresMana = foodRestoresMana,
@@ -147,5 +160,61 @@ function Scan.FindBestConsumables()
         food = bestFood and { bagID = bestFood.bagID, slot = bestFood.slot, itemID = getContainerItemID(bestFood.bagID, bestFood.slot) },
     }
 
-    return bestWater, bestFood, foodRestoresMana
+    return bestWater, bestFood, foodRestoresMana, false
 end
+
+local function invalidateCache()
+    if cache then
+        cache.isValid = false
+    end
+end
+
+-- Turns a Blizzard localized "You receive item: %s." style format string into
+-- a Lua pattern, escaping magic characters and turning %s/%d into captures.
+local function toPattern(fmt)
+    if not fmt then return nil end
+    return (fmt:gsub("(%p)", "%%%1"):gsub("%%%%s", "(.+)"):gsub("%%%%d", "%%d+"))
+end
+
+-- Two distinct message families can hand us a new item, each with singular/plural forms:
+--  - LOOT_ITEM_SELF / _MULTIPLE: "You receive loot: %s." (corpse loot window)
+--  - LOOT_ITEM_PUSHED_SELF / _MULTIPLE: "You receive item: %s." (vendor buys, mail, trades,
+--    quest rewards, and other items pushed into bags outside the loot window)
+-- Fall back to the plain enUS format in case a global is missing on this client,
+-- so a nil global can't take down the rest of the file (and the event registration below).
+local selfLootPatterns = {
+    toPattern(LOOT_ITEM_SELF) or "You receive loot: (.+)%.",
+    toPattern(LOOT_ITEM_SELF_MULTIPLE) or "You receive loot: (.+)x%d+%.",
+    toPattern(LOOT_ITEM_PUSHED_SELF) or "You receive item: (.+)%.",
+    toPattern(LOOT_ITEM_PUSHED_SELF_MULTIPLE) or "You receive item: (.+)x%d+%.",
+}
+
+local function matchSelfLootLink(message)
+    for _, pattern in ipairs(selfLootPatterns) do
+        local itemLink = message:match(pattern)
+        if itemLink then return itemLink end
+    end
+end
+
+local function onChatMsgLoot(message)
+    if not cache then return end -- nothing cached yet; next full scan covers everything
+
+    local itemLink = matchSelfLootLink(message)
+    if not itemLink then return end -- not our own "you receive item/loot" message
+
+    local candidate = scanLink(itemLink)
+    if not candidate then return end
+
+    if candidate.manaRate and isBetter(candidate, cache.bestWater, "manaRate") then
+        invalidateCache()
+    end
+    if candidate.healthRate and isBetter(candidate, cache.bestFood, "healthRate") then
+        invalidateCache()
+    end
+end
+
+local scanEventFrame = CreateFrame("Frame")
+scanEventFrame:RegisterEvent("CHAT_MSG_LOOT")
+scanEventFrame:SetScript("OnEvent", function(_, _, message)
+    onChatMsgLoot(message)
+end)
