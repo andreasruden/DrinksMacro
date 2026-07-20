@@ -152,7 +152,7 @@ function Scan.FindBestConsumables()
     local foodRestoresMana = bestFood ~= nil and bestFood.manaRate ~= nil
 
     cache = {
-        isValid = true,
+        isValid = bestWater ~= nil or bestFood ~= nil,
         bestWater = bestWater,
         bestFood = bestFood,
         foodRestoresMana = foodRestoresMana,

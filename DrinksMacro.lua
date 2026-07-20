@@ -96,12 +96,6 @@ dmFrame:SetScript("OnEvent", function(self, event, name, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         DrinksMacro.UpdateMacro()
     elseif event == "PLAYER_ENTERING_WORLD" then
-        local isLogin, isReload = name, ...
-        -- A plain zone/instance change (not login or /reload) keeps whatever macro
-        -- already exists; bag contents haven't changed, and a fresh scan right after
-        -- a loading screen can run before bag data is populated, producing an empty macro.
-        if isLogin or isReload then
-            DrinksMacro.UpdateMacro()
-        end
+        C_Timer.After(5, DrinksMacro.UpdateMacro)
     end
 end)
