@@ -79,12 +79,28 @@ local function classifyTooltip(lines)
     }
 end
 
+local function getContainerItemID(bagID, slot)
+    local getItemID = C_Container and C_Container.GetContainerItemID or GetContainerItemID
+    return getItemID(bagID, slot)
+end
+
+-- Returns false only if we know for certain the player is too low level to use the item.
+-- If GetItemInfo hasn't cached the item yet (minLevel == nil), treat it as usable rather
+-- than filtering it out based on incomplete data.
+local function isUsableAtLevel(itemID)
+    if not itemID then return true end
+    local _, _, _, _, minLevel = GetItemInfo(itemID)
+    if not minLevel or minLevel == 0 then return true end
+    return UnitLevel("player") >= minLevel
+end
+
 -- Returns item info table or nil if slot should be ignored.
 local function scanSlot(bagID, slot)
     ScanTooltip:ClearLines()
     ScanTooltip:SetBagItem(bagID, slot)
     local item = classifyTooltip(readTooltipLines())
     if not item then return end
+    if not isUsableAtLevel(getContainerItemID(bagID, slot)) then return end
     item.bagID, item.slot = bagID, slot
     return item
 end
@@ -93,12 +109,11 @@ end
 local function scanLink(itemLink)
     ScanTooltip:ClearLines()
     ScanTooltip:SetHyperlink(itemLink)
-    return classifyTooltip(readTooltipLines())
-end
-
-local function getContainerItemID(bagID, slot)
-    local getItemID = C_Container and C_Container.GetContainerItemID or GetContainerItemID
-    return getItemID(bagID, slot)
+    local item = classifyTooltip(readTooltipLines())
+    if not item then return end
+    local itemID = GetItemInfoInstant(itemLink)
+    if not isUsableAtLevel(itemID) then return end
+    return item
 end
 
 -- Checks that the slots recorded in cache still hold the same items.
@@ -169,6 +184,14 @@ local onInvalidate
 --- invalidates the cache (i.e. a better water/food was just picked up).
 function Scan.SetOnInvalidate(callback)
     onInvalidate = callback
+end
+
+--- Forces a full rescan on next FindBestConsumables() call (e.g. player leveled up,
+--- so previously level-gated items may now qualify) and fires the same rebuild
+--- callback used by the loot-invalidation path.
+function Scan.InvalidateAll()
+    cache = nil
+    if onInvalidate then onInvalidate() end
 end
 
 local function invalidateCache()
