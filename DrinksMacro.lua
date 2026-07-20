@@ -46,20 +46,31 @@ local function getItemID(bagID, slot)
     return GetContainerItemID(bagID, slot)
 end
 
+local function getHealthPercent()
+    local hpMax = UnitHealthMax("player")
+    return hpMax > 0 and (UnitHealth("player") / hpMax * 100) or 100
+end
+
+local function getManaPercent()
+    local mana = UnitMana and UnitMana("player") or UnitPower("player", 0)
+    local manaMax = UnitManaMax and UnitManaMax("player") or UnitPowerMax("player", 0)
+    return manaMax > 0 and (mana / manaMax * 100) or 100
+end
+
+-- true/false = below/above threshold at last UpdateMacro(); nil = not tracked
+local thresholdState = { drink = nil, food = nil }
+
 function DrinksMacro.UpdateMacro()
     local db = DrinksMacroDB
     local water, food, foodRestoresMana = DrinksMacro.Scan.FindBestConsumables()
     local lines = {}
 
-    local hpMax = UnitHealthMax("player")
-    local hpPct = hpMax > 0 and (UnitHealth("player") / hpMax * 100) or 100
+    local hpPct = getHealthPercent()
+    local manaPct = getManaPercent()
     local needsFood = db.food.enabled and food ~= nil and (not db.food.useThreshold or hpPct < db.food.threshold)
 
     if db.drink.enabled and water and not (needsFood and foodRestoresMana) then
-        local mana = UnitMana and UnitMana("player") or UnitPower("player", 0)
-        local manaMax = UnitManaMax and UnitManaMax("player") or UnitPowerMax("player", 0)
-        local pct = manaMax > 0 and (mana / manaMax * 100) or 100
-        if not db.drink.useThreshold or pct < db.drink.threshold then
+        if not db.drink.useThreshold or manaPct < db.drink.threshold then
             local itemID = getItemID(water.bagID, water.slot)
             local name = itemID and GetItemInfo(itemID)
             if name then
@@ -83,19 +94,63 @@ function DrinksMacro.UpdateMacro()
     else
         EditMacro(idx, "DrinksMacro", nil, body)
     end
+
+    if db.food.useThreshold then
+        thresholdState.food = hpPct < db.food.threshold
+    else
+        thresholdState.food = nil
+    end
+
+    if db.drink.useThreshold then
+        thresholdState.drink = manaPct < db.drink.threshold
+    else
+        thresholdState.drink = nil
+    end
+end
+
+local function checkThresholdCrossing(kind, currentPct)
+    local settings = DrinksMacroDB[kind]
+    if not settings.useThreshold then return end
+    local wasBelow = thresholdState[kind]
+    if wasBelow == nil then return end
+    if wasBelow and currentPct >= settings.threshold + 10 then
+        DrinksMacro.UpdateMacro()
+    elseif not wasBelow and currentPct <= settings.threshold - 10 then
+        DrinksMacro.UpdateMacro()
+    end
 end
 
 local dmFrame = CreateFrame("Frame")
 dmFrame:RegisterEvent("ADDON_LOADED")
+
+local function updateHealthWatcher()
+    if UnitAffectingCombat("player") then
+        dmFrame:UnregisterEvent("UNIT_HEALTH")
+        dmFrame:UnregisterEvent("UNIT_POWER_UPDATE")
+    else
+        dmFrame:RegisterUnitEvent("UNIT_HEALTH", "player")
+        dmFrame:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
+    end
+end
+
 dmFrame:SetScript("OnEvent", function(self, event, name, ...)
     if event == "ADDON_LOADED" then
         if name ~= addonName then return end
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        self:RegisterEvent("PLAYER_REGEN_DISABLED")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
     elseif event == "PLAYER_REGEN_ENABLED" then
         DrinksMacro.UpdateMacro()
+        updateHealthWatcher()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        updateHealthWatcher()
     elseif event == "PLAYER_ENTERING_WORLD" then
         C_Timer.After(5, DrinksMacro.UpdateMacro)
+        updateHealthWatcher()
+    elseif event == "UNIT_HEALTH" then
+        checkThresholdCrossing("food", getHealthPercent())
+    elseif event == "UNIT_POWER_UPDATE" then
+        checkThresholdCrossing("drink", getManaPercent())
     end
 end)
