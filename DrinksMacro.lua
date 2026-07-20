@@ -140,6 +140,11 @@ dmFrame:SetScript("OnEvent", function(self, event, name, ...)
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
         self:RegisterEvent("PLAYER_REGEN_DISABLED")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
+        DrinksMacro.Scan.SetOnInvalidate(function()
+            -- CHAT_MSG_LOOT can fire before the item actually lands in bags, so give
+            -- it a moment to settle before rescanning (mirrors the PLAYER_ENTERING_WORLD delay below).
+            C_Timer.After(5, DrinksMacro.UpdateMacro)
+        end)
     elseif event == "PLAYER_REGEN_ENABLED" then
         DrinksMacro.UpdateMacro()
         updateHealthWatcher()

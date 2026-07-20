@@ -163,9 +163,18 @@ function Scan.FindBestConsumables()
     return bestWater, bestFood, foodRestoresMana, false
 end
 
+local onInvalidate
+
+--- Registers a callback to fire whenever a newly received/looted item
+--- invalidates the cache (i.e. a better water/food was just picked up).
+function Scan.SetOnInvalidate(callback)
+    onInvalidate = callback
+end
+
 local function invalidateCache()
-    if cache then
+    if cache and cache.isValid then
         cache.isValid = false
+        if onInvalidate then onInvalidate() end
     end
 end
 
